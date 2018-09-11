@@ -514,16 +514,15 @@ class JIRA(object):
     def close(self):
         session = getattr(self, "_session", None)
         if session is not None:
+            try:
+                session.close()
+            except TypeError:
+                # TypeError: "'NoneType' object is not callable"
+                # Could still happen here because other references are also
+                # in the process to be torn down, see warning section in
+                # https://docs.python.org/2/reference/datamodel.html#object.__del__
+                pass
             self._session = None
-            if self.sys_version_info < (3, 4, 0):  # workaround for https://github.com/kennethreitz/requests/issues/2303
-                try:
-                    session.close()
-                except TypeError:
-                    # TypeError: "'NoneType' object is not callable"
-                    # Could still happen here because other references are also
-                    # in the process to be torn down, see warning section in
-                    # https://docs.python.org/2/reference/datamodel.html#object.__del__
-                    pass
 
     def _check_for_html_error(self, content):
         # JIRA has the bad habit of returning errors in pages with 200 and
@@ -2061,7 +2060,8 @@ class JIRA(object):
         :param maxResults: maximum number of issues to return. Total number of results
             is available in the ``total`` attribute of the returned :class:`~jira.client.ResultList`.
             If maxResults evaluates as False, it will try to get all issues in batches.
-        :param fields: comma-separated string of issue fields to include in the results
+        :param fields: comma-separated string of issue fields to include in the results.
+            Default is to include all fields.
         :param expand: extra information to fetch inside each resource
         :param json_result: JSON response will be returned when this parameter is set to True.
                 Otherwise, :class:`~jira.client.ResultList` will be returned.
@@ -3061,13 +3061,14 @@ class JIRA(object):
     """
 
     @translate_resource_args
-    def boards(self, startAt=0, maxResults=50, type=None, name=None):
+    def boards(self, startAt=0, maxResults=50, type=None, name=None, projectKeyOrID=None):
         """Get a list of board resources.
 
         :param startAt: The starting index of the returned boards. Base index: 0.
         :param maxResults: The maximum number of boards to return per page. Default: 50
         :param type: Filters results to boards of the specified type. Valid values: scrum, kanban.
         :param name: Filters results to boards that match or partially match the specified name.
+        :param projectKeyOrID: Filters results to boards that match the specified project key or ID.
         :rtype: ResultList[Board]
 
         When old GreenHopper private API is used, paging is not enabled and all parameters are ignored.
@@ -3077,6 +3078,8 @@ class JIRA(object):
             params['type'] = type
         if name:
             params['name'] = name
+        if projectKeyOrID:
+            params['projectKeyOrId'] = projectKeyOrID
 
         if self._options['agile_rest_path'] == GreenHopperResource.GREENHOPPER_REST_PATH:
             # Old, private API did not support pagination, all records were present in response,
